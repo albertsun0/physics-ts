@@ -49,9 +49,9 @@ class Renderer {
         for (let i = 0; i < objects.length; i++) {
             const obj = objects[i];
             const ctx = this.context;
-            const width = obj.width;
+            const r = obj.radius;
             ctx.beginPath();
-            ctx.arc(obj.position_current.x - width / 2, obj.position_current.y - width / 2, width, 0, 2 * Math.PI, false);
+            ctx.arc(obj.position_current.x - r, obj.position_current.y - r, r, 0, 2 * Math.PI, false);
             ctx.fillStyle = 'black';
             ctx.fill();
         }
@@ -62,12 +62,16 @@ class VerletObject {
     public position_current: Vec2;
     public position_old: Vec2;
     public acceleration: Vec2;
-    public width = 20;
+    public radius = 10;
 
-    constructor(x = 0, y = 0) {
+    constructor(x = 0, y = 0, radius = -1) {
         this.position_current = new Vec2(x, y);
         this.position_old = new Vec2(x, y);
         this.acceleration = new Vec2();
+        if (radius === -1) {
+            this.radius = 20;
+        }
+
     }
 
     public update(dt: number) {
@@ -87,6 +91,7 @@ class VertletSystem {
     public objects: VerletObject[] = [];
     public gravity: Vec2 = new Vec2(0, 1000);
     public dt: number = 1 / 60;
+    public subSteps = 2;
 
     constructor(dt = 1 / 60) {
         this.dt = dt;
@@ -94,15 +99,22 @@ class VertletSystem {
     }
 
     public update() {
-        this.applyGravity();
-        this.applyConstraint();
-        this.updatePositions();
+        for (let i = 0; i < this.subSteps; i++) {
+            this.applyGravity();
+            this.applyConstraint();
+            this.updatePositions(this.dt / this.subSteps);
+            this.checkCollisions();
+        }
     }
 
-    public updatePositions() {
+    public addObject(x: number, y: number) {
+        this.objects.push(new VerletObject(x, y));
+    }
+
+    public updatePositions(dt: number) {
         for (let i = 0; i < this.objects.length; i++) {
             const obj = this.objects[i];
-            obj.update(this.dt);
+            obj.update(dt);
         }
     }
 
@@ -119,15 +131,32 @@ class VertletSystem {
 
         for (let i = 0; i < this.objects.length; i++) {
             const diff = this.objects[i].position_current.sub(position);
-            const dist = Vec2Length(diff); // distance from center
-            if (dist > radius - 10) { // 10 is the width of the object
+            const dist = Vec2Length(diff);
+            if (dist > radius - this.objects[i].radius) {
                 const n = diff.mult(1 / dist);
-                this.objects[i].position_current = position.add(n.mult(dist - 30));
+                this.objects[i].position_current = position.add(n.mult(radius - this.objects[i].radius));
+            }
+        }
+    }
+
+    public checkCollisions() {
+        for (let i = 0; i < this.objects.length; i++) {
+            const obj1 = this.objects[i];
+            for (let j = i + 1; j < this.objects.length; j++) {
+                const obj2 = this.objects[j];
+                const diff = obj1.position_current.sub(obj2.position_current);
+                const dist = Vec2Length(diff);
+                const minDist = obj1.radius + obj2.radius;
+                if (dist < minDist) {
+                    const n = diff.mult(1 / dist);
+                    const delta = minDist - dist;
+                    obj1.position_current = obj1.position_current.add(n.mult(0.5 * delta));
+                    obj2.position_current = obj2.position_current.sub(n.mult(0.5 * delta));
+                }
             }
         }
     }
 }
-
 
 const fps = 60
 
@@ -135,6 +164,9 @@ const system = new VertletSystem(1 / fps);
 
 const renderer = new Renderer();
 
+renderer.canvas.addEventListener('click', (e) => {
+    system.addObject(e.offsetX, e.offsetY);
+})
 function update() {
     system.update();
     renderer.render(system.objects);
@@ -142,5 +174,4 @@ function update() {
 
 update();
 
-console.log("WORKING")
 setInterval(update, 1000 / fps);

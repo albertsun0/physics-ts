@@ -42,9 +42,9 @@ var Renderer = /** @class */ (function () {
         for (var i = 0; i < objects.length; i++) {
             var obj = objects[i];
             var ctx = this.context;
-            var width = obj.width;
+            var r = obj.radius;
             ctx.beginPath();
-            ctx.arc(obj.position_current.x - width / 2, obj.position_current.y - width / 2, width, 0, 2 * Math.PI, false);
+            ctx.arc(obj.position_current.x - r, obj.position_current.y - r, r, 0, 2 * Math.PI, false);
             ctx.fillStyle = 'black';
             ctx.fill();
         }
@@ -52,13 +52,17 @@ var Renderer = /** @class */ (function () {
     return Renderer;
 }());
 var VerletObject = /** @class */ (function () {
-    function VerletObject(x, y) {
+    function VerletObject(x, y, radius) {
         if (x === void 0) { x = 0; }
         if (y === void 0) { y = 0; }
-        this.width = 20;
+        if (radius === void 0) { radius = -1; }
+        this.radius = 10;
         this.position_current = new Vec2(x, y);
         this.position_old = new Vec2(x, y);
         this.acceleration = new Vec2();
+        if (radius === -1) {
+            this.radius = 20;
+        }
     }
     VerletObject.prototype.update = function (dt) {
         var velocity = this.position_current.sub(this.position_old);
@@ -77,18 +81,25 @@ var VertletSystem = /** @class */ (function () {
         this.objects = [];
         this.gravity = new Vec2(0, 1000);
         this.dt = 1 / 60;
+        this.subSteps = 2;
         this.dt = dt;
         this.objects.push(new VerletObject(600, 300));
     }
     VertletSystem.prototype.update = function () {
-        this.applyGravity();
-        this.applyConstraint();
-        this.updatePositions();
+        for (var i = 0; i < this.subSteps; i++) {
+            this.applyGravity();
+            this.applyConstraint();
+            this.updatePositions(this.dt / this.subSteps);
+            this.checkCollisions();
+        }
     };
-    VertletSystem.prototype.updatePositions = function () {
+    VertletSystem.prototype.addObject = function (x, y) {
+        this.objects.push(new VerletObject(x, y));
+    };
+    VertletSystem.prototype.updatePositions = function (dt) {
         for (var i = 0; i < this.objects.length; i++) {
             var obj = this.objects[i];
-            obj.update(this.dt);
+            obj.update(dt);
         }
     };
     VertletSystem.prototype.applyGravity = function () {
@@ -102,10 +113,27 @@ var VertletSystem = /** @class */ (function () {
         var radius = 200;
         for (var i = 0; i < this.objects.length; i++) {
             var diff = this.objects[i].position_current.sub(position);
-            var dist = Vec2Length(diff); // distance from center
-            if (dist > radius - 10) { // 10 is the width of the object
+            var dist = Vec2Length(diff);
+            if (dist > radius - this.objects[i].radius) {
                 var n = diff.mult(1 / dist);
-                this.objects[i].position_current = position.add(n.mult(dist - 30));
+                this.objects[i].position_current = position.add(n.mult(radius - this.objects[i].radius));
+            }
+        }
+    };
+    VertletSystem.prototype.checkCollisions = function () {
+        for (var i = 0; i < this.objects.length; i++) {
+            var obj1 = this.objects[i];
+            for (var j = i + 1; j < this.objects.length; j++) {
+                var obj2 = this.objects[j];
+                var diff = obj1.position_current.sub(obj2.position_current);
+                var dist = Vec2Length(diff);
+                var minDist = obj1.radius + obj2.radius;
+                if (dist < minDist) {
+                    var n = diff.mult(1 / dist);
+                    var delta = minDist - dist;
+                    obj1.position_current = obj1.position_current.add(n.mult(0.5 * delta));
+                    obj2.position_current = obj2.position_current.sub(n.mult(0.5 * delta));
+                }
             }
         }
     };
@@ -114,11 +142,13 @@ var VertletSystem = /** @class */ (function () {
 var fps = 60;
 var system = new VertletSystem(1 / fps);
 var renderer = new Renderer();
+renderer.canvas.addEventListener('click', function (e) {
+    system.addObject(e.offsetX, e.offsetY);
+});
 function update() {
     system.update();
     renderer.render(system.objects);
 }
 update();
-console.log("WORKING");
 setInterval(update, 1000 / fps);
 //# sourceMappingURL=main.js.map
