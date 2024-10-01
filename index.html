@@ -1,15 +1,44 @@
 <html>
   <head>
     <title>Canvas demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
   </head>
 
-  <body>
-    <canvas
-      id="canvas"
-      width="1000"
-      height="600"
-      style="border: 1px solid black"
-    >
+  <body style="padding: 0%; background-color: rgb(31, 31, 31); margin: 0px">
+    <div class="absolute m-4 flex flex-col space-y-2">
+      <div
+        class="p-2 text-gray-300 bg-gray border border-gray-700 rounded-sm select-none"
+      >
+        <div class="font-bold mb-2">Velet Physics Solver</div>
+        <div>Click to add objects</div>
+        <div>Click object to fix position</div>
+        <div>Right click to add links</div>
+      </div>
+
+      <button
+        class="p-2 text-white bg-gray border border-gray-700 rounded-sm select-none w-auto"
+        onclick="pause()"
+        id="pause"
+      >
+        Pause
+      </button>
+
+      <button
+        class="p-2 text-white bg-gray border border-gray-700 rounded-sm select-none w-auto"
+        onclick="addLine()"
+      >
+        Add Line
+      </button>
+
+      <button
+        class="p-2 text-white bg-gray border border-gray-700 rounded-sm select-none w-auto"
+        onclick="add100()"
+      >
+        Add 100 Objects
+      </button>
+    </div>
+
+    <canvas id="canvas" style="width: 100%; height: 100%; padding: 0px">
     </canvas>
     <script>
       var exports = { __esModule: true };
