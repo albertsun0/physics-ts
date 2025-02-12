@@ -21,18 +21,24 @@ var Vec2 = /** @class */ (function () {
     Vec2.prototype.mult = function (x) {
         return new Vec2(this.x * x, this.y * x);
     };
+    Vec2.prototype.dot = function (v) {
+        return this.x * v.x + this.y * v.y;
+    };
     Vec2.prototype.clone = function () {
         return new Vec2(this.x, this.y);
     };
     return Vec2;
 }());
 exports.Vec2 = Vec2;
+var Vec2Rotate90 = function (a) {
+    return new Vec2(-a.y, a.x);
+};
 var Vec2Length = function (a) {
     return Math.sqrt(a.x * a.x + a.y * a.y);
 };
 var Renderer = /** @class */ (function () {
     function Renderer() {
-        var canvas = document.getElementById('canvas');
+        var canvas = document.getElementById("canvas");
         var context = canvas.getContext("2d");
         this.canvas = canvas;
         this.context = context;
@@ -46,7 +52,7 @@ var Renderer = /** @class */ (function () {
             ctx.beginPath();
             ctx.moveTo(link.a.position_current.x, link.a.position_current.y);
             ctx.lineTo(link.b.position_current.x, link.b.position_current.y);
-            ctx.strokeStyle = 'gray';
+            ctx.strokeStyle = "gray";
             ctx.lineWidth = 4;
             ctx.stroke();
         }
@@ -56,15 +62,16 @@ var Renderer = /** @class */ (function () {
             var r = obj.radius;
             ctx.beginPath();
             ctx.arc(obj.position_current.x, obj.position_current.y, r, 0, 2 * Math.PI, false);
-            ctx.fillStyle = 'gray';
+            ctx.fillStyle = "gray";
             if (obj.fixed) {
-                ctx.fillStyle = 'red';
+                ctx.fillStyle = "red";
             }
             ctx.fill();
         }
     };
     return Renderer;
 }());
+var objectId = 0;
 var VerletObject = /** @class */ (function () {
     function VerletObject(x, y, radius, fixed) {
         if (x === void 0) { x = 0; }
@@ -72,6 +79,7 @@ var VerletObject = /** @class */ (function () {
         if (radius === void 0) { radius = -1; }
         if (fixed === void 0) { fixed = false; }
         this.radius = 10;
+        this.id = objectId++;
         this.position_current = new Vec2(x, y);
         this.position_old = new Vec2(x, y);
         this.acceleration = new Vec2();
@@ -85,7 +93,9 @@ var VerletObject = /** @class */ (function () {
             return;
         var velocity = this.position_current.sub(this.position_old);
         this.position_old = this.position_current;
-        this.position_current = this.position_current.add(velocity).add(this.acceleration.mult(dt).mult(dt));
+        this.position_current = this.position_current
+            .add(velocity)
+            .add(this.acceleration.mult(dt).mult(dt));
         this.acceleration = new Vec2();
     };
     VerletObject.prototype.accelerate = function (acc) {
@@ -138,10 +148,13 @@ var VertletSystem = /** @class */ (function () {
         for (var i = 0; i < this.subSteps; i++) {
             this.applyGravity();
             this.applyConstraint();
+            for (var i_1 = 0; i_1 < this.objects.length; i_1++) {
+                this.applyAngleConstraint(this.objects[i_1]);
+            }
             this.updatePositions(this.dt / this.subSteps);
-            this.checkCollisions();
-            for (var i_1 = 0; i_1 < this.links.length; i_1++) {
-                this.links[i_1].update();
+            //   this.checkCollisions();
+            for (var i_2 = 0; i_2 < this.links.length; i_2++) {
+                this.links[i_2].update();
             }
         }
     };
@@ -175,30 +188,50 @@ var VertletSystem = /** @class */ (function () {
             }
         }
     };
+    VertletSystem.prototype.applyAngleConstraint = function (o) {
+        // find all links between object
+        var links = this.links.filter(function (l) { return l.a === o || l.b === o; });
+        if (links.length !== 2)
+            return;
+        var a = links[0];
+        var b = links[1];
+        var ao = a.a.id !== o.id ? a.a : a.b;
+        var bo = b.a.id !== o.id ? b.a : b.b;
+        var va = ao.position_current.sub(o.position_current);
+        var vb = bo.position_current.sub(o.position_current);
+        var thetaA = Math.acos(va.dot(vb) / (Vec2Length(va) * Vec2Length(vb))) - Math.PI;
+        var thetaB = Math.acos(vb.dot(va) / (Vec2Length(va) * Vec2Length(vb))) - Math.PI;
+        // console.log("theta", (theta + Math.PI) * (180 / Math.PI));
+        var va_perp = Vec2Rotate90(va).mult(1 / Vec2Length(va));
+        var vb_perp = Vec2Rotate90(vb).mult(1 / Vec2Length(vb));
+        ao.position_current = ao.position_current.add(va_perp.mult(-0.01 * thetaA).mult(thetaA));
+        bo.position_current = bo.position_current.add(vb_perp.mult(-0.01 * thetaB).mult(thetaB));
+    };
     VertletSystem.prototype.applyConstraint = function () {
         for (var i = 0; i < this.objects.length; i++) {
             if (this.objects[i].fixed)
                 continue;
             var object = this.objects[i];
+            var bounceFactor = 0.5;
             if (object.position_current.y > this.height - object.radius) {
                 var diff = object.position_current.y - (this.height - object.radius);
                 var u = new Vec2(0, -1);
-                object.position_current = object.position_current.add(u.mult(diff * 0.5));
+                object.position_current = object.position_current.add(u.mult(diff * bounceFactor));
             }
             if (object.position_current.y < 0 + object.radius) {
                 var diff = object.radius - object.position_current.y;
                 var u = new Vec2(0, 1);
-                object.position_current = object.position_current.add(u.mult(diff * 0.5));
+                object.position_current = object.position_current.add(u.mult(diff * bounceFactor));
             }
             if (object.position_current.x > this.width - object.radius) {
                 var diff = object.position_current.x - (this.width - object.radius);
                 var u = new Vec2(-1, 0);
-                object.position_current = object.position_current.add(u.mult(diff * 0.5));
+                object.position_current = object.position_current.add(u.mult(diff * bounceFactor));
             }
             if (object.position_current.x < 0 + object.radius) {
                 var diff = object.radius - object.position_current.x;
                 var u = new Vec2(1, 0);
-                object.position_current = object.position_current.add(u.mult(diff * 0.5));
+                object.position_current = object.position_current.add(u.mult(diff * bounceFactor));
             }
         }
     };
@@ -238,12 +271,13 @@ var h = window.innerHeight;
 renderer.canvas.width = w;
 renderer.canvas.height = h;
 var system = new VertletSystem(w, h, 1 / fps);
-var a = new VerletObject(300, 300);
-var b = new VerletObject(300, 400);
-var link1 = new Link(a, b);
-system.addObject(a);
-system.addObject(b);
-system.addLink(link1);
+// const a = new VerletObject(300, 300);
+// const b = new VerletObject(300, 400);
+// console.log(a, b);
+// const link1 = new Link(a, b);
+// system.addObject(a);
+// system.addObject(b);
+// system.addLink(link1);
 var addLine = function () {
     var prevObject = null;
     var y = 100;
@@ -265,8 +299,9 @@ var add100 = function () {
     }
 };
 var prevObject = null;
-renderer.canvas.addEventListener('click', function (e) {
+renderer.canvas.addEventListener("click", function (e) {
     console.log("click");
+    console.log(system.objects);
     // check if clicked an object
     for (var i = 0; i < system.objects.length; i++) {
         var obj_1 = system.objects[i];
@@ -281,7 +316,7 @@ renderer.canvas.addEventListener('click', function (e) {
     system.addObject(obj);
     prevObject = null;
 });
-renderer.canvas.addEventListener('contextmenu', function (e) {
+renderer.canvas.addEventListener("contextmenu", function (e) {
     e.preventDefault();
     console.log("contextmenu");
     for (var i = 0; i < system.objects.length; i++) {

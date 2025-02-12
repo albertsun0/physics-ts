@@ -23,6 +23,9 @@ var Vec2 = /** @class */ (function () {
     Vec2.prototype.clone = function () {
         return new Vec2(this.x, this.y);
     };
+    Vec2.prototype.norm = function () {
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+    };
     return Vec2;
 }());
 exports.Vec2 = Vec2;
